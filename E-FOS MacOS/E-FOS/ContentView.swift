@@ -18,12 +18,29 @@ struct ContentView: View {
     @State private var isImageFullscreen = false
     @State private var showCopiedAlert = false
     
+    // Auto-login setting for Neptun (stored with AppStorage)
+    @AppStorage("neptun_auto_login") private var autoLoginEnabled = false
+    @State private var showSettings = false
+    
     var body: some View {
         ZStack {
             Color(nsColor: NSColor.controlBackgroundColor)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(spacing: 0) {
+                // Top header with settings gear button
+                HStack {
+                    Spacer()
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal)
+                
                 // Title
                 Text("E-FOS")
                     .font(.largeTitle)
@@ -38,13 +55,29 @@ struct ContentView: View {
                 
                 // Menu Buttons
                 VStack(spacing: 0) {
-                    // 1) Neptun
-                    menuButton(
-                        title: "Neptun",
-                        iconName: "neptun_icon",
-                        link: "https://neptun.elte.hu",
-                        hoverIndex: 0
-                    )
+                    // 1) Neptun – if auto-login is enabled, use our custom action.
+                    Button {
+                        openNeptun()
+                    } label: {
+                        HStack {
+                            Image("neptun_icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24, height: 24)
+                            Text("Neptun")
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.vertical, 8)
+                    .background(isHovered[0] ? Color.blue.opacity(0.1) : Color.clear)
+                    .cornerRadius(4)
+                    .onHover { hovering in
+                        isHovered[0] = hovering
+                    }
+                    
                     // 2) Canvas
                     menuButton(
                         title: "Canvas",
@@ -52,6 +85,7 @@ struct ContentView: View {
                         link: "https://canvas.elte.hu",
                         hoverIndex: 1
                     )
+                    
                     // 3) TMS
                     menuButton(
                         title: "TMS",
@@ -112,8 +146,7 @@ struct ContentView: View {
                         .onHover { hovering in
                             hoverFocusModeInfo = hovering
                         }
-                        .padding(.trailing, 8) // extra spacing from right edge
-                        
+                        .padding(.trailing, 8)
                     }
                     .padding(.vertical, 8)
                     .background(isHovered[3] ? Color.blue.opacity(0.1) : Color.clear)
@@ -148,7 +181,7 @@ struct ContentView: View {
             .padding()
             .frame(width: 300, height: 400)
         }
-        // Instructions in a sheet
+        // Sheet for the info/instructions (TMS Focus Mode)
         .sheet(isPresented: $showInfoSheet) {
             ZStack {
                 if isImageFullscreen {
@@ -265,11 +298,17 @@ struct ContentView: View {
             .frame(minWidth: 600, minHeight: 400)
         }
         
-        // Copied Alert
+        // Copied Alert (for when bookmarklet code is copied)
         .alert("Copied!", isPresented: $showCopiedAlert) {
             Text("The JavaScript code has been copied. Paste it into your browser's address bar and press Enter.")
         }
+        // Settings Sheet – assumes you’ve implemented SettingsView separately
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
     }
+    
+    // MARK: - Subviews and Functions
     
     private var fullImageView: some View {
         VStack {
@@ -288,6 +327,7 @@ struct ContentView: View {
         .background(Color.black.opacity(0.9))
     }
     
+    /// Copies the TMS Focus Mode bookmarklet code (existing functionality)
     private func copyBookmarkletToClipboard() {
         let bookmarkletCode = """
         javascript:(function(){
@@ -308,7 +348,33 @@ struct ContentView: View {
         showCopiedAlert = true
     }
     
-    // Reusable menu button
+    /// Copies the one-line Neptun auto-login bookmarklet using stored credentials.
+    private func copyNeptunLoginBookmarklet() {
+        let username = loadFromKeychain(account: "neptun_username") ?? ""
+        let password = loadFromKeychain(account: "neptun_password") ?? ""
+        let bookmarklet = "javascript:(function(){document.getElementById('user').value='\(username)';document.getElementById('password').value='\(password)';document.querySelector(\"button[type='submit']\").click();})();"
+        
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(bookmarklet, forType: .string)
+    }
+    
+    /// Opens Neptun – if auto-login is enabled, copies the login bookmarklet and opens the login page.
+    private func openNeptun() {
+        if autoLoginEnabled {
+            copyNeptunLoginBookmarklet()
+            showCopiedAlert = true
+            if let url = URL(string: "https://neptun.elte.hu/Account/Login") {
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            if let url = URL(string: "https://neptun.elte.hu") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+    
+    /// Reusable menu button for non-Neptun buttons.
     private func menuButton(title: String, iconName: String, link: String, hoverIndex: Int) -> some View {
         Button {
             if let url = URL(string: link) {
